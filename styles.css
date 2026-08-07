@@ -187,6 +187,35 @@ svg {
   border-radius: 0.8rem;
 }
 
+.posts-sync-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+}
+
+.posts-sync-status[data-state="ok"] {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.posts-sync-status[data-state="warning"] {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.posts-sync-status[data-state="pending"] {
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(59, 130, 246, 0.12);
+}
+
 .site-nav .nav-button {
   padding: 0.8rem 1.1rem;
   border-radius: 999px;

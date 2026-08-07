@@ -1189,6 +1189,13 @@ if (confirmAvatarBtn) confirmAvatarBtn.addEventListener('click', () => {
 
 // ===== MAIN APP DATA =====
 const STORAGE_KEY = "crossGameLFG_posts";
+const PENDING_POSTS_KEY = "crossGameLFG_pending_posts";
+const POSTS_SYNC_INTERVAL_MS = 5000;
+const apiBaseQuery = new URLSearchParams(window.location.search).get('apiBase');
+if (apiBaseQuery) {
+  localStorage.setItem('teamup_api_base', apiBaseQuery);
+}
+const API_BASE_URL = resolveApiBaseUrl();
 const postForm = document.getElementById("post-form");
 const postList = document.getElementById("post-list");
 const gameFilter = document.getElementById("game-filter");
@@ -1218,6 +1225,96 @@ const chatMobileToggleBtn = document.getElementById('chat-mobile-toggle');
 const chatMobileCloseBtn = document.getElementById('chat-mobile-close');
 
 const gamemodeSelect = document.getElementById('gamemode');
+
+let syncStatusEl = null;
+
+function resolveApiBaseUrl() {
+  const rawValue = localStorage.getItem('teamup_api_base') || 'http://localhost:3000';
+  try {
+    const parsed = new URL(rawValue);
+    return parsed.origin;
+  } catch (error) {
+    return 'http://localhost:3000';
+  }
+}
+
+function loadPendingPosts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PENDING_POSTS_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function savePendingPosts(posts) {
+  localStorage.setItem(PENDING_POSTS_KEY, JSON.stringify(posts));
+}
+
+function enqueuePendingPost(post) {
+  const pending = loadPendingPosts();
+  pending.unshift(post);
+  savePendingPosts(pending);
+}
+
+function removePendingPost(postId) {
+  const pending = loadPendingPosts().filter((post) => post.id !== postId);
+  savePendingPosts(pending);
+}
+
+function normalizePostKey(post) {
+  if (!post) return '';
+  const createdAt = Number.isFinite(Number(post.createdAt)) ? Number(post.createdAt) : 0;
+  return [
+    String(post.id || '').trim(),
+    String(post.author || '').trim().toLowerCase(),
+    String(post.game || '').trim().toLowerCase(),
+    String(post.description || '').trim().toLowerCase(),
+    createdAt
+  ].join('::');
+}
+
+function mergePosts(primary, secondary) {
+  const merged = [];
+  const seen = new Set();
+  [...primary, ...secondary].forEach((post) => {
+    const normalized = normalizeServerPost(post);
+    if (!normalized) return;
+    const key = normalizePostKey(normalized);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    merged.push(normalized);
+  });
+  merged.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return merged;
+}
+
+function setSyncStatus(state, text) {
+  if (!syncStatusEl) return;
+  syncStatusEl.dataset.state = state;
+  syncStatusEl.textContent = text;
+}
+
+function initSyncStatus() {
+  const nav = document.querySelector('.site-nav');
+  if (!nav || syncStatusEl) return;
+
+  const status = document.createElement('span');
+  status.id = 'posts-sync-status';
+  status.className = 'posts-sync-status';
+  status.setAttribute('aria-live', 'polite');
+  nav.appendChild(status);
+  syncStatusEl = status;
+
+  const host = (() => {
+    try {
+      return new URL(API_BASE_URL).host;
+    } catch (error) {
+      return API_BASE_URL;
+    }
+  })();
+  setSyncStatus('pending', `Sync server: ${host}`);
+}
 
 
 // Limited game list as requested — only show these games in the UI
@@ -1364,6 +1461,106 @@ const initialPosts = [
   },
 ];
 
+function normalizeServerPost(post) {
+  if (!post || typeof post !== 'object') return null;
+  return {
+    id: post.id ? String(post.id) : crypto.randomUUID(),
+    game: post.game || '',
+    author: post.author || 'Anonymous',
+    role: post.role || 'Any',
+    age: Number.isFinite(Number(post.age)) ? Number(post.age) : null,
+    platform: post.platform || 'Any',
+    server: post.server || 'All regions',
+    rank: post.rank || null,
+    gamemode: post.gamemode || '',
+    description: post.description || '',
+    createdAt: Number.isFinite(Number(post.createdAt)) ? Number(post.createdAt) : Date.now(),
+    userId: post.userId || null
+  };
+}
+
+async function fetchServerPosts() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/posts`, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Posts fetch failed (${response.status})`);
+    const rows = await response.json();
+    const posts = Array.isArray(rows)
+      ? rows.map(normalizeServerPost).filter(Boolean)
+      : [];
+    return posts;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function savePostToServer(post) {
+  const payload = {
+    game: post.game,
+    author: post.author,
+    role: post.role,
+    age: post.age,
+    platform: post.platform,
+    server: post.server,
+    description: post.description,
+    rank: post.rank,
+    stats: post.stats || null,
+    createdAt: post.createdAt,
+    gamemode: post.gamemode || '',
+    userId: post.userId || null
+  };
+  const response = await fetch(`${API_BASE_URL}/api/posts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    throw new Error(`Posts save failed (${response.status})`);
+  }
+}
+
+async function flushPendingPostsToServer() {
+  const pending = loadPendingPosts();
+  if (!pending.length) return;
+
+  for (const post of pending) {
+    try {
+      await savePostToServer(post);
+      removePendingPost(post.id);
+    } catch (error) {
+      setSyncStatus('warning', 'Sync waiting for server connection');
+      throw error;
+    }
+  }
+}
+
+async function syncPostsFromServer({ render = true } = {}) {
+  try {
+    await flushPendingPostsToServer();
+    const serverPosts = await fetchServerPosts();
+    const localPosts = loadPosts();
+    const mergedPosts = mergePosts(serverPosts, localPosts);
+
+    if (mergedPosts.length > 0) {
+      savePosts(mergedPosts);
+    } else if (!localStorage.getItem(STORAGE_KEY)) {
+      savePosts(initialPosts);
+    }
+
+    setSyncStatus('ok', 'Posts synced for all devices');
+    if (render) updatePostList();
+  } catch (error) {
+    // Keep local cache as fallback when backend is unreachable.
+    console.warn('Server sync unavailable, using local cache.', error);
+    setSyncStatus('warning', 'Offline mode: local posts only');
+  }
+}
+
 function loadPosts() {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
@@ -1397,6 +1594,8 @@ function updateAccountStatus() {
 }
 
 function isAgeRestricted(postAge) {
+  const shouldEnforceAgeFilter = localStorage.getItem('teamFormCompleted') === 'true';
+  if (!shouldEnforceAgeFilter) return false;
   const min = parseInt(teamAgeFrom.value, 10);
   const max = parseInt(teamAgeTo.value, 10);
   if (Number.isNaN(min) || Number.isNaN(max)) return false;
@@ -1407,6 +1606,11 @@ function isAgeRestricted(postAge) {
 }
 
 function setCompatibilityMessage() {
+  const shouldEnforceAgeFilter = localStorage.getItem('teamFormCompleted') === 'true';
+  if (!shouldEnforceAgeFilter) {
+    compatibilityMessage.style.display = "none";
+    return;
+  }
   const min = parseInt(teamAgeFrom.value, 10);
   const max = parseInt(teamAgeTo.value, 10);
   if (Number.isNaN(min) || Number.isNaN(max)) {
@@ -1809,12 +2013,37 @@ function updatePostList() {
 
   postList.innerHTML = "";
   if (filtered.length === 0) {
-    postList.innerHTML = `
-      <div class="post-card">
-        <h3>No matches yet</h3>
-        <p>Try another game or post your own session to get started.</p>
-      </div>
-    `;
+    const hasAnyPosts = posts.length > 0;
+    if (hasAnyPosts) {
+      postList.innerHTML = `
+        <div class="post-card">
+          <h3>No matches with current filters</h3>
+          <p>Posts exist, but your game/role/rank/region filters are hiding them.</p>
+          <button id="reset-filters-btn" class="button button-secondary" type="button">Show all posts</button>
+        </div>
+      `;
+      const resetBtn = document.getElementById('reset-filters-btn');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+          if (gameFilter) gameFilter.value = 'all';
+          if (roleFilter) roleFilter.value = 'all';
+          const rankFilterSelect = document.getElementById('rank-filter');
+          if (rankFilterSelect) rankFilterSelect.value = 'all';
+          serverButtons.forEach((button) => {
+            button.classList.toggle('active', button.dataset.region === 'All regions');
+          });
+          updateRankFilterForGame('all');
+          updatePostList();
+        }, { once: true });
+      }
+    } else {
+      postList.innerHTML = `
+        <div class="post-card">
+          <h3>No matches yet</h3>
+          <p>Try another game or post your own session to get started.</p>
+        </div>
+      `;
+    }
   } else {
     const fragment = document.createDocumentFragment();
     filtered.forEach((post) => {
@@ -2480,6 +2709,9 @@ async function updateOnlinePlayersPanel() {
 
 // start updating online players panel periodically
 setInterval(updateOnlinePlayersPanel, 5000);
+setInterval(() => {
+  syncPostsFromServer({ render: true });
+}, POSTS_SYNC_INTERVAL_MS);
 function initOnlinePanel() { updateOnlinePlayersPanel(); }
 initOnlinePanel();
 
@@ -2609,6 +2841,16 @@ function handleSubmit(event) {
   const posts = loadPosts();
   posts.unshift(newPost);
   savePosts(posts);
+  enqueuePendingPost(newPost);
+  setSyncStatus('pending', 'Syncing post to shared server...');
+
+  flushPendingPostsToServer()
+    .then(() => syncPostsFromServer({ render: true }))
+    .catch((error) => {
+      console.warn('Could not save post to shared server; post is still saved locally.', error);
+      setSyncStatus('warning', 'Post saved locally; waiting to sync');
+    });
+
   postForm.reset();
   // after creating post, refresh rank filter lists to include new game's ranks
   updateRankFilterForGame(gameFilter.value);
@@ -2916,10 +3158,12 @@ if (tabChats) tabChats.addEventListener('click', () => { document.getElementById
 updateRequestsUI();
 updateChatsUI();
 
+initSyncStatus();
 populateGameOptions();
 updateTeamVisibility();
 updatePostList();
 updateOnlinePlayersPanel();
+syncPostsFromServer({ render: true });
 
 // Initialize auth and display
 translationCache = loadTranslationCache();
