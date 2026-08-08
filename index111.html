@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teamup.gg</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <span class="logo">TGG</span>
+        <div>
+          <h1>Teamup.gg</h1>
+          <p>Find squad members for Roblox, Valorant, Minecraft, Fortnite and more.</p>
+        </div>
+      </div>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a href="#browse">Browse</a>
+        <a href="#post">Post</a>
+        <a href="#info">How it works</a>
+        <div class="site-language-control">
+          <label id="site-language-label" for="site-language-select">Language</label>
+          <select id="site-language-select" aria-label="Language selector"></select>
+        </div>
+        <div class="account-wrapper">
+          <button id="account-btn" class="button button-secondary">Log in</button>
+          <div id="account-menu" class="account-menu" style="display:none;"></div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <p class="eyebrow">One place for all your squads</p>
+          <h2>Stop switching servers. Find teammates fast across games.</h2>
+          <p>Browse live group requests, post your own game session, and connect with players for Roblox, Valorant, Minecraft, Fortnite, Apex Legends, and more.</p>
+          <div class="game-characters" aria-label="Featured game characters"></div>
+          <a class="button button-primary" href="#browse">Browse Posts</a>
+        </div>
+        <div class="hero-panel">
+          <div id="listing-preview" class="listing-preview"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="online" class="container section">
+      <div class="section-heading">
+        <h2>Players online (live)</h2>
+        <p>Quick view of how many players are active per game. Click a game to filter posts.</p>
+      </div>
+      <div id="online-players" class="server-filter-group" aria-label="Players online by game"></div>
+    </section>
+
+    <section id="browse" class="container section">
+      <div class="section-heading">
+        <h2>Browse current posts</h2>
+        <p>Filter by the game you want to play and join a session instantly.</p>
+      </div>
+      <div class="filters">
+        <label>
+          Games
+          <select id="game-filter" aria-label="Filter by game"></select>
+        </label>
+        <label>
+          Role
+          <select id="role-filter" aria-label="Filter by role"></select>
+        </label>
+        <label>
+          Rank
+          <select id="rank-filter" aria-label="Filter by rank"></select>
+        </label>
+      </div>
+      <div class="server-filter-group" aria-label="Server region filters">
+        <button type="button" class="button button-secondary server-button active" data-region="All regions">All regions</button>
+        <button type="button" class="button button-secondary server-button" data-region="North America East">North America East</button>
+        <button type="button" class="button button-secondary server-button" data-region="North America West">North America West</button>
+        <button type="button" class="button button-secondary server-button" data-region="South America">South America</button>
+        <button type="button" class="button button-secondary server-button" data-region="EU">EU</button>
+        <button type="button" class="button button-secondary server-button" data-region="Asia">Asia</button>
+        <button type="button" class="button button-secondary server-button" data-region="Oceania">Oceania</button>
+        <button type="button" class="button button-secondary server-button" data-region="Africa">Africa</button>
+        <button type="button" class="button button-secondary server-button" data-region="Middle East">Middle East</button>
+      </div>
+      <div id="compatibility-message" class="compatibility-message" aria-live="polite"></div>
+      <div id="post-list" class="post-list"></div>
+    </section>
+
+    <div id="team-overlay" class="team-overlay" style="display:none;">
+      <div class="team-overlay-card">
+        <div class="team-overlay-header">
+          <h2>Tell us about yourself</h2>
+          <button type="button" id="team-close" class="button button-secondary">Close</button>
+        </div>
+        <p>Fill out as much as you want to help us find the right teammates for you.</p>
+        <form id="team-form" class="team-form">
+          <div class="form-grid"></div>
+          <div class="form-actions"></div>
+        </form>
+      </div>
+    </div>
+
+    <section id="post" class="container section section-secondary">
+      <div class="section-heading">
+        <h2>Post your own teamup request!</h2>
+        <p>Reach other players without needing Discord or multiple communities.</p>
+      </div>
+      <form id="post-form" class="post-form">
+        <div class="form-grid">
+          <label></label>
+          <label></label>
+          <label></label>
+          <label></label>
+          <label></label>
+          <label></label>
+          <label></label>
+          <label></label>
+        </div>
+        <label class="full-width">
+          Description
+          <textarea id="description" rows="4" placeholder="What are you looking for?"></textarea>
+          <p id="description-error" class="input-error" style="display:none;color:#fca5a5;margin:0.25rem 0 0;font-size:0.95rem;">Inappropriate language detected in description.</p>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="button button-primary">Post Listing</button>
+          <button type="button" class="button button-secondary" id="clear-storage">Clear saved posts</button>
+        </div>
+      </form>
+    </section>
+
+    <div id="auth-modal" class="modal" style="display:none;">
+      <div class="modal-content">
+        <button id="close-auth-modal" class="modal-close" type="button">×</button>
+        <div id="login-form" class="auth-form">
+          <h2>Login to Teamup.gg</h2>
+          <input id="login-email" type="email" placeholder="Email" required />
+          <input id="login-password" type="password" placeholder="Password" required />
+          <button id="login-btn" class="button button-primary">Login</button>
+          <p>Don't have an account? <button id="switch-signup" type="button" class="button button-secondary">Sign up</button></p>
+          <p id="login-error" style="color:#fca5a5;"></p>
+        </div>
+        <div id="signup-form" class="auth-form" style="display:none;">
+          <h2>Create Account</h2>
+          <input id="signup-email" type="email" placeholder="Email" required />
+          <input id="signup-password" type="password" placeholder="Password" required />
+          <input id="signup-confirm" type="password" placeholder="Confirm password" required />
+          <select id="signup-age"></select>
+          <select id="signup-timezone"></select>
+          <fieldset style="border:none;padding:0;margin:0;"></fieldset>
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;"></div>
+          <p>Already have an account? <button id="switch-login" type="button" class="button button-secondary">Login</button></p>
+          <p id="signup-error" style="color:#fca5a5;"></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="profile-modal" class="modal" style="display:none;">
+      <div class="modal-content profile-modal-content" style="max-width:760px; width:min(92vw, 760px);">
+        <button id="close-profile-modal" class="modal-close" type="button">×</button>
+        <h2 id="profile-modal-title">Player Profile</h2>
+        <div id="profile-content"></div>
+      </div>
+    </div>
+
+    <div id="avatar-modal" class="modal" style="display:none;">
+      <div class="modal-content">
+        <h2>Choose your display name and avatar</h2>
+        <input id="display-name" type="text" placeholder="Display name (e.g., DragonSlayer)" />
+        <div class="avatar-grid" id="avatar-grid"></div>
+        <button id="confirm-avatar" class="button button-primary">Continue</button>
+      </div>
+    </div>
+
+    <aside id="chat-panel" class="chat-panel" aria-label="Messages panel">
+      <div class="chat-header">
+        <h3>Messages</h3>
+        <div class="chat-tabs"></div>
+      </div>
+      <div id="chat-requests" class="chat-requests panel active">
+        <h4>Incoming requests</h4>
+        <div id="requests-list"></div>
+      </div>
+      <div id="chat-list" class="chat-list panel" style="display:none;">
+        <h4>Your chats</h4>
+        <div id="chats-list"></div>
+      </div>
+      <div id="chat-window" class="chat-window" style="display:none;">
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input"></div>
+      </div>
+    </aside>
+
+    <button id="chat-mobile-toggle" class="button button-primary chat-mobile-toggle" type="button" aria-controls="chat-panel" aria-expanded="false">Messages</button>
+  </main>
+
+  <script src="script.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-analytics.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDc1KqidOq64SiQQF0uEvuu5nIJ_Rd1H2I",
+      authDomain: "teamupgg-a6b85.firebaseapp.com",
+      projectId: "teamupgg-a6b85",
+      storageBucket: "teamupgg-a6b85.firebasestorage.app",
+      messagingSenderId: "410206644107",
+      appId: "1:410206644107:web:7148c2e1bb29cf8ddcb18e",
+      measurementId: "G-NDGK2FY0N3"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    getAnalytics(app);
+  </script>
+</body>
+</html>
